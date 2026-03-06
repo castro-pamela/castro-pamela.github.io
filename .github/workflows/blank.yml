@@ -1,0 +1,46 @@
+name: VNC Desktop
+
+on: workflow_dispatch # Hanya jalan jika di-trigger manual
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install VNC Server & Desktop Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tightvncserver xfce4 xfce4-goodies
+          sudo apt-get install -y dbus-x11
+
+      - name: Configure VNC Server
+        run: |
+          mkdir -p ~/.vnc
+          echo "${{ secrets.VNC_PASSWORD }}" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
+          echo "#!/bin/sh
+          xrdb $HOME/.Xresources
+          startxfce4 &" > ~/.vnc/xstartup
+          chmod +x ~/.vnc/xstartup
+
+      - name: Start VNC Server
+        run: |
+          vncserver :1 -geometry 1280x800 -depth 24
+
+      - name: Setup Ngrok
+        run: |
+          wget https://bin.equinox.io
+          tar -xvf ngrok-v3-stable-linux-amd64.tgz
+          sudo mv ngrok /usr/local/bin/
+          ngrok authtoken ${{ secrets.NGROK_TOKEN }}
+          ngrok tcp 5901 &
+
+      - name: Get VNC Connection Info
+        run: |
+          echo "VNC Server is running!"
+          echo "Connect with VNC Viewer to the address in the ngrok log above"
+          echo "Username: (none)"
+          echo "Password: ${{ secrets.VNC_PASSWORD }}"
+          sleep 21600 # Menjaga job tetap hidup selama 6 jam
