@@ -1,46 +1,47 @@
-name: VNC Desktop
-
-on: workflow_dispatch # Hanya jalan jika di-trigger manual
+name: VNC Server Remote
+on: workflow_dispatch # Hanya berjalan manual
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Install VNC Server & Desktop Environment
+      - name: Install Desktop Environment and VNC
         run: |
           sudo apt-get update
-          sudo apt-get install -y tightvncserver xfce4 xfce4-goodies
-          sudo apt-get install -y dbus-x11
-
-      - name: Configure VNC Server
+          sudo apt-get install -y xfce4 xfce4-goodies tightvncserver dbus-x11
+          
+      - name: Setup VNC Password
         run: |
           mkdir -p ~/.vnc
           echo "${{ secrets.VNC_PASSWORD }}" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
-          echo "#!/bin/sh
-          xrdb $HOME/.Xresources
-          startxfce4 &" > ~/.vnc/xstartup
-          chmod +x ~/.vnc/xstartup
-
+          
       - name: Start VNC Server
         run: |
-          vncserver :1 -geometry 1280x800 -depth 24
-
-      - name: Setup Ngrok
+          vncserver -geometry 1280x800 -depth 24 :1
+          
+      - name: Install Ngrok
         run: |
-          wget https://bin.equinox.io
-          tar -xvf ngrok-v3-stable-linux-amd64.tgz
-          sudo mv ngrok /usr/local/bin/
-          ngrok authtoken ${{ secrets.NGROK_TOKEN }}
+          curl -s https://ngrok-agent.s3.amazonaws.com | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update
+          sudo apt-get install ngrok
+          
+      - name: Start Ngrok Tunnel
+        run: |
+          ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
           ngrok tcp 5901 &
-
-      - name: Get VNC Connection Info
+          
+      - name: Get VNC Address
         run: |
-          echo "VNC Server is running!"
-          echo "Connect with VNC Viewer to the address in the ngrok log above"
-          echo "Username: (none)"
-          echo "Password: ${{ secrets.VNC_PASSWORD }}"
-          sleep 21600 # Menjaga job tetap hidup selama 6 jam
+          echo "Waiting for ngrok to start..."
+          sleep 10
+          curl -s http://localhost:4040/api/tunnels | jq -r .tunnels[0].public_url
+          
+      - name: Keep Alive
+        run: |
+          echo "VNC Running... Press Ctrl+C to cancel if running locally."
+          sleep 21600 # Menahan sesi selama 6 jam
